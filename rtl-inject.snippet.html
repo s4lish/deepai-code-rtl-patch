@@ -1,0 +1,185 @@
+<script>
+  // === DeepAI Code RTL patch (Persian / bidirectional text support) ===
+  // Scoped by default: RTL applies only to the conversation content
+  // (message markdown + composer), never to app chrome.
+  // Controlled by localStorage key "t3code:ui-direction":
+  //   "chat" (default) -> RTL only on chat message content + composer
+  //   "rtl"            -> RTL on the whole UI
+  //   "ltr"            -> LTR everywhere
+  //   "auto"           -> browser auto-detection on the root element
+  (() => {
+    "use strict";
+    const DIR_KEY = "t3code:ui-direction";
+    let pref = "chat";
+    try {
+      pref = String(localStorage.getItem(DIR_KEY) || "chat").toLowerCase();
+    } catch {}
+    if (!["chat", "rtl", "ltr", "auto"].includes(pref)) pref = "chat";
+
+    const root = document.documentElement;
+    let current = "";
+    const applyRoot = () => {
+      // The root element only ever changes for "rtl" / "ltr" / "auto" modes.
+      // In the default "chat" mode the root stays LTR so the sidebar,
+      // titlebar and side panels are never mirrored; only the conversation
+      // content (handled below) is RTL.
+      let dir, lang;
+      if (pref === "auto") {
+        dir = "auto";
+        lang = "fa";
+      } else if (pref === "rtl") {
+        dir = "rtl";
+        lang = "fa";
+      } else {
+        dir = "ltr";
+        lang = "en";
+      }
+      const next = dir + "|" + lang;
+      if (next === current) return;
+      current = next;
+      root.setAttribute("dir", dir);
+      root.setAttribute("lang", lang);
+    };
+    applyRoot();
+
+    // Only these containers get per-content auto direction; everything else
+    // simply inherits the current direction.
+    // .workspace-message-surface is the whole conversation surface of a thread:
+    // it also covers re-opened sessions / restored history that may render
+    // through a different component without .chat-markdown.
+    const MARK =
+      ".chat-markdown, .ProseMirror, .workspace-message-surface, .chat-content-lane";
+    // Code, terminals, diffs and math must always stay LTR.
+    const CODE =
+      "pre, code, kbd, samp, .chat-markdown-codeblock, .chat-markdown-shiki, .shiki, .cm-editor, .monaco-editor, .xterm, .terminal, .diff-render-surface, .katex";
+    const BLOCK =
+      "p, li, h1, h2, h3, h4, h5, h6, blockquote, dd, dt, td, th, figcaption, caption";
+
+    // Plain text leaves (div/span/a holding only text or inline children) also
+    // get an auto direction — user messages, thinking summaries and tool
+    // captions are often rendered as bare divs, not <p>.
+    const TEXT_LEAF = "div, span, a";
+    const INLINE_ONLY = new Set([
+      "SPAN", "A", "CODE", "STRONG", "EM", "B", "I", "U", "S", "SMALL",
+      "MARK", "SUB", "SUP", "KBD", "BR", "IMG", "WBR", "ABBR", "CITE",
+      "Q", "TIME", "VAR", "SAMP", "DEL", "INS",
+    ]);
+    const isPlainLeaf = (el) => {
+      const kids = el.children;
+      for (let i = 0; i < kids.length; i++) {
+        if (!INLINE_ONLY.has(kids[i].tagName)) return false;
+      }
+      return (el.textContent || "").trim().length > 0;
+    };
+
+    const pending = new Set();
+    let scheduled = false;
+    const processContainer = (container) => {
+      if (container.classList.contains("ProseMirror")) {
+        // Composer: direction follows the first strong character typed.
+        if (container.getAttribute("dir") !== "auto") container.setAttribute("dir", "auto");
+        return;
+      }
+      // NOTE: never mirror the container itself — it can be a flex layout
+      // whose children would be reordered/broken. Only the text blocks inside
+      // get an auto direction, which fixes Persian text direction and
+      // alignment without touching any layout.
+      for (const node of container.querySelectorAll(
+        BLOCK + ", " + TEXT_LEAF,
+      )) {
+        if (node.closest(CODE)) continue;
+        // Only set when missing: avoids write storms while streaming and
+        // survives re-renders that recreate blocks without the attribute.
+        if (node.hasAttribute("dir")) continue;
+        const isBlock = node.matches(BLOCK);
+        if (!isBlock && !isPlainLeaf(node)) continue;
+        // Never touch layout containers (flex/grid rows would be mirrored).
+        const display = getComputedStyle(node).display;
+        if (
+          display === "flex" ||
+          display === "inline-flex" ||
+          display === "grid"
+        ) {
+          continue;
+        }
+        node.setAttribute("dir", "auto");
+      }
+      const first = container.firstElementChild;
+      if (first && !first.matches(BLOCK + "," + CODE) && !first.hasAttribute("dir")) {
+        first.setAttribute("dir", "auto");
+      }
+      for (const c of container.querySelectorAll(CODE)) {
+        if (c.getAttribute("dir") !== "ltr") c.setAttribute("dir", "ltr");
+      }
+    };
+    const flush = () => {
+      scheduled = false;
+      applyRoot();
+      for (const el of pending) {
+        pending.delete(el);
+        if (!el || !(el instanceof Element)) continue;
+        const container = el.closest(MARK);
+        if (container) processContainer(container);
+      }
+    };
+    const queue = (el) => {
+      if (!el) return;
+      pending.add(el);
+      if (!scheduled) {
+        scheduled = true;
+        queueMicrotask(flush);
+      }
+    };
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "childList") {
+          for (const n of m.addedNodes) {
+            queue(n instanceof Element ? n : n.parentElement);
+          }
+        } else {
+          queue(m.target.parentElement);
+        }
+      }
+    });
+    observer.observe(root, { subtree: true, childList: true, characterData: true });
+
+    // Safety net: a periodic sweep heals anything the observer missed — e.g.
+    // restored sessions re-rendered through another component, or framework
+    // re-renders that dropped our attributes. Only fills in missing values.
+    setInterval(() => {
+      try {
+        document.querySelectorAll(MARK).forEach(processContainer);
+      } catch {}
+    }, 1000);
+  })();
+</script>
+<style>
+  /* === DeepAI Code RTL patch: keep technical content LTR === */
+  pre,
+  code,
+  kbd,
+  samp,
+  .chat-markdown-codeblock,
+  .chat-markdown-codeblock-header,
+  .chat-markdown-shiki,
+  .shiki,
+  .cm-editor,
+  .monaco-editor,
+  .xterm,
+  .terminal,
+  .diff-render-surface,
+  .katex {
+    direction: ltr;
+    text-align: left;
+  }
+  code,
+  kbd,
+  samp {
+    unicode-bidi: isolate;
+  }
+  /* Composer fallback: auto paragraph direction even before the script runs. */
+  .ProseMirror {
+    unicode-bidi: plaintext;
+  }
+</style>
