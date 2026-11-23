@@ -36,8 +36,21 @@ node install-rtl-patch.mjs
 |---|---|
 | `install-rtl-patch.mjs` | اسکریپت نصب قابل‌حمل (استخراج → پچ → بسته‌بندی → صحت‌سنجی → بکاپ) |
 | `rtl-inject.snippet.html` | محتوای واقعی پچ (script + style) |
+| `disable-auto-updates.mjs` | کنترل آپدیت خودکار برنامه (`off` / `on` / `status`) |
 | `README-RTL-PATCH.md` | مستندات فنی کامل + عیب‌یابی + بازگردانی |
 | `GUIDE-INSTALL.md` | راهنمای نصب ساده |
+
+## جلوگیری از آپدیت خودکار (که پچ را پاک می‌کند)
+
+آپدیت خودکار برنامه، `server.asar` را بازنویسی می‌کند و پچ را حذف می‌کند. خود برنامه یک راه رسمی برای این کار دارد — متغیر محیطی `T3CODE_DISABLE_AUTO_UPDATE`:
+
+```powershell
+node disable-auto-updates.mjs off      # غیرفعال کردن آپدیت خودکار
+node disable-auto-updates.mjs on       # دوباره فعال کردن (برای آپدیت دستی)
+node disable-auto-updates.mjs status   # وضعیت فعلی
+```
+
+بعد از تغییر، برنامه باید کامل بسته و باز شود (اگر اعمال نشد، یک بار از حساب ویندوز خارج و وارد شوید). برای آپدیت دستی: `on` → آپدیت برنامه → `off` → دوباره پچ RTL را نصب کنید.
 
 ## تنظیم جهت
 

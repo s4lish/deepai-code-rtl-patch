@@ -54,6 +54,11 @@ node install-rtl-patch.mjs "C:\مسیر-نصب-برنامه\resources"
   جدید را می‌گذارد.
 - **بعد از آپدیت خودِ برنامه:** ممکن است پچ از بین برود؛ فقط دوباره
   `node install-rtl-patch.mjs` را اجرا کن.
+- **جلوی آپدیت خودکار را بگیر** (تا پچ پاک نشود):
+  ```powershell
+  node disable-auto-updates.mjs off
+  ```
+  بعدش برنامه را کامل ببند و باز کن. برای آپدیت دستی: `on`، آپدیت، `off`، دوباره پچ.
 - **خاموش کردن موقت RTL** (بدون حذف پچ): در DevTools برنامه (Ctrl+Shift+I):
   ```js
   localStorage.setItem("t3code:ui-direction", "ltr"); location.reload();
